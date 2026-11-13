@@ -1,0 +1,74 @@
+[
+  {
+    "sku": "LFJ-3174",
+    "preco_brl": 18.0,
+    "pcs_cx": 200,
+    "nome_pt": "DEPILADOR LUKTON",
+    "nome_cn": "盧克頓除毛器",
+    "status_montagem": "montado",
+    "pagina": 1
+  },
+  {
+    "sku": "BL-344",
+    "preco_brl": 10.6,
+    "pcs_cx": 120,
+    "nome_pt": "DEPILADOR LUKTON",
+    "nome_cn": "盧克頓除毛器",
+    "status_montagem": "montado",
+    "pagina": 1
+  },
+  {
+    "sku": "LFJ-3160",
+    "preco_brl": 35.5,
+    "pcs_cx": 100,
+    "nome_pt": "MÁQUINA DE TOSA PET LUKTON",
+    "nome_cn": "拉克頓寵物理髮器",
+    "status_montagem": "desmontado",
+    "pagina": 1
+  },
+  {
+    "sku": "DT-63",
+    "preco_brl": 7.1,
+    "pcs_cx": 240,
+    "nome_pt": "MINI LANTERNA TÁTICA RECARREGÁVEL",
+    "nome_cn": "迷你可充電戰術手電筒",
+    "status_montagem": "montado",
+    "pagina": 1
+  },
+  {
+    "sku": "DT-69",
+    "preco_brl": 57.0,
+    "pcs_cx": 40,
+    "nome_pt": "LANTERNA TÁTICA RECARREGÁVEL",
+    "nome_cn": "可充電戰術手電筒",
+    "status_montagem": "montado",
+    "pagina": 1
+  },
+  {
+    "sku": "HJ-702",
+    "preco_brl": 10.0,
+    "pcs_cx": 300,
+    "nome_pt": "CORRETOR DE POSTURA",
+    "nome_cn": "姿勢矯正器",
+    "status_montagem": "montado",
+    "pagina": 1
+  },
+  {
+    "sku": "AMQ-662",
+    "preco_brl": 19.0,
+    "pcs_cx": 160,
+    "nome_pt": "ESCOVA MASSAGEADORA LED",
+    "nome_cn": "头疗喷雾按摩梳",
+    "status_montagem": "desmontado",
+    "pagina": 1
+  },
+  {
+    "sku": "ZJ-114",
+    "preco_brl": 6.5,
+    "pcs_cx": 100,
+    "nome_pt": "SUPORTE ARTICULADO DE CELULAR",
+    "nome_cn": "可折疊手機支架",
+    "status_montagem": "desmontado",
+    "pagina": 1
+  }
+]
