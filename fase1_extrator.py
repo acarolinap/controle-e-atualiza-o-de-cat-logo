@@ -1,26 +1,21 @@
-"""Fase 1 - Extrator do catálogo Lukton (SKU como âncora).
-
-Usa PyMuPDF (pip install pymupdf).
-
-Uso:  python fase1_extrator.py "Catálogo_Traduzido_13_11.pdf" --out saida/
-Saída: saida/produtos.json + saida/assets/img/{SKU}.png
-"""
+"""Fase 1 - Extrator do catálogo Lukton (SKU como âncora)."""
 import argparse
 import json
 import re
 import unicodedata
+import os
+from PIL import Image
+import pytesseract
 from pathlib import Path
 
-SKU_RE = re.compile(r"^[A-Z]{1,5}-\d{1,5}[A-Z]?$")
+SKU_RE = re.compile(r"^([A-Z]{1,5}-?\d{1,6}[A-Z]?|[A-Z0-9]+-[A-Z0-9\-]*[A-UW-Z0-9])$")
 PRECO_RE = re.compile(r"^\d{1,4},\d{2}$")
 CJK_RE = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]")
-TOL_DUP = 1.5      # pt: tolerância p/ considerar caractere "sombra"
-TOL_LINHA = 3.0    # pt: tolerância em Y p/ agrupar caracteres numa linha
-RODAPE_Y = 760     # pt: acima disso é conteúdo de cards (A4 595x842)
-CABECALHO_Y = 95   # pt: abaixo disso começam os cards
+TOL_DUP = 1.5      
+TOL_LINHA = 3.0    
+RODAPE_Y = 760     
+CABECALHO_Y = 95   
 
-
-# ---------------------------------------------------------------- PyMuPDF
 def _load_fitz(pdf_path):
     import pymupdf as fitz
     doc = fitz.open(pdf_path)
@@ -46,16 +41,10 @@ def _load_fitz(pdf_path):
             yield chars, imgs, render, salvar
     return paginas
 
-
 def carregar(pdf_path):
     return _load_fitz(pdf_path), "pymupdf"
 
-
-# ------------------------------------------------------------ texto/sombras
 def dedup_chars(chars):
-    """Remove caracteres-sombra: mesmo glifo, mesma posição (±TOL_DUP).
-    Opera por coordenada, então 'SS' legítimo (separado ~5pt) é preservado."""
-    # descarta invisíveis/controle (ex.: U+200C, U+200B) que o fitz devolve
     chars = [(unicodedata.normalize("NFKC", c[0]),) + tuple(c[1:]) for c in chars
              if unicodedata.category(c[0][:1] or " ") not in ("Cf", "Cc")]
     mantidos = []
@@ -66,9 +55,7 @@ def dedup_chars(chars):
         mantidos.append(c)
     return mantidos
 
-
 def montar_palavras(chars):
-    """Agrupa caracteres em palavras (por linha em Y e lacuna em X)."""
     linhas = []
     for c in sorted(chars, key=lambda t: (t[2], t[1])):
         if c[0].isspace():
@@ -84,7 +71,7 @@ def montar_palavras(chars):
         cs = sorted(ln["cs"], key=lambda t: t[1])
         atual = [cs[0]]
         for c in cs[1:]:
-            if c[1] - atual[-1][3] > 0.18 * (c[4] - c[2]):  # lacuna proporcional à fonte
+            if c[1] - atual[-1][3] > 0.18 * (c[4] - c[2]):  
                 palavras.append(atual)
                 atual = []
             atual.append(c)
@@ -98,74 +85,112 @@ def montar_palavras(chars):
         })
     return out
 
-
-# ------------------------------------------------------------------ cards
 def cards_da_pagina(palavras, imgs):
-    # imagens de card: grandes (as demais são ícones/rótulos pequenos)
-    # fotos reais: ~135pt de largura. As fatias de fundo/sombra do card que o
-    # fitz também lista têm >=177pt e aparecem duplicadas, então ficam de fora.
+    """Identifica a posição de cada card na página utilizando a foto e o SKU como âncoras para definir a zona de leitura."""
     fotos = []
     for i in imgs:
         w, h = i[2] - i[0], i[3] - i[1]
-        if 100 < w < 160 and 60 < h < 140 and i[1] > CABECALHO_Y - 10:
+        if 40 < w < 250 and 40 < h < 250 and i[1] > CABECALHO_Y - 20:
             if not any(all(abs(a - b) < 1 for a, b in zip(i, f)) for f in fotos):
                 fotos.append(i)
+                
     skus = [w for w in palavras if SKU_RE.match(w["t"]) and w["y0"] > CABECALHO_Y]
     cards = []
     for s in skus:
         cx = (s["x0"] + s["x1"]) / 2
-        # imagem do card: contém cx em X e termina logo acima do SKU
-        cand = [f for f in fotos if f[0] - 10 <= cx <= f[2] + 10 and f[3] <= s["y0"] + 5]
+        cand = [f for f in fotos if f[0] - 25 <= cx <= f[2] + 25 and f[1] <= s["y1"] + 30]
         foto = max(cand, key=lambda f: f[3]) if cand else None
-        if not foto:
-            continue
-        # fim da zona: topo da próxima imagem na mesma coluna ou o rodapé
-        abaixo = [f[1] for f in fotos if f[1] > s["y1"] + 5
-                  and f[0] - 10 <= cx <= f[2] + 10]
-        y_fim = min(abaixo + [RODAPE_Y]) - 2
-        zona = (foto[0] - 25, s["y0"] - 3, foto[2] + 25, y_fim)
+        
+        if foto:
+            x_min = min(foto[0], s["x0"]) - 15
+            x_max = max(foto[2], s["x1"]) + 15
+            y_min = foto[1] - 10
+            y_max = max(foto[3], s["y1"]) + 10
+        else:
+            x_min = s["x0"] - 70
+            x_max = s["x1"] + 70
+            y_min = s["y0"] - 130
+            y_max = s["y1"] + 15
+            
+        zona = (x_min, y_min, x_max, y_max)
         cards.append((s, foto, zona))
+        
     return cards
 
-
-def extrair_campos(s, zona, palavras):
+def extrair_campos(s, zona, palavras, caminho_img=None):
+    """Extrai campos do texto vetorizado e complementa com OCR na imagem do produto se necessário."""
     ws = [w for w in palavras
           if zona[0] <= (w["x0"] + w["x1"]) / 2 <= zona[2]
           and zona[1] <= w["y0"] <= zona[3]]
     ws.sort(key=lambda w: (round(w["y0"] / TOL_LINHA), w["x0"]))
-    preco = next((float(w["t"].replace(",", ".")) for w in ws
-                  if PRECO_RE.match(w["t"]) and (w["y1"] - w["y0"]) > 12), None)
+    
+    txt_vetor = " ".join(w["t"] for w in ws)
+    
+    txt_ocr = ""
+    if caminho_img and os.path.exists(caminho_img):
+        try:
+            img = Image.open(caminho_img)
+            txt_ocr = pytesseract.image_to_string(img, config='--psm 6')
+        except Exception:
+            pass
+            
+    txt_completo = txt_vetor + " " + txt_ocr
+
+    preco = None
+    match_preco = re.search(r'(?:R\$)?\s*(\d+[\.,]\d{2})', txt_completo)
+    if match_preco:
+        try:
+            preco = float(match_preco.group(1).replace(",", "."))
+        except ValueError:
+            pass
+
     pcs = None
-    for i, w in enumerate(ws):
-        if w["t"].upper().startswith("PCS/CX") and i > 0 and ws[i - 1]["t"].isdigit():
-            pcs = int(ws[i - 1]["t"])
-    txt = " ".join(w["t"] for w in ws)
-    if "DESMONTADO" in txt:
+    match_pcs = re.search(r'(\d+)\s*(?:PCS|PC|CX|个|箱)', txt_completo, re.IGNORECASE)
+    if match_pcs:
+        try:
+            pcs = int(match_pcs.group(1))
+        except ValueError:
+            pass
+
+    if "DESMONTADO" in txt_completo.upper() or "散装" in txt_completo:
         montagem = "desmontado"
-    elif "MONTADO" in txt:
+    elif "MONTADO" in txt_completo.upper() or "包好" in txt_completo:
         montagem = "montado"
     else:
         montagem = None
-    ignora = lambda t: (t == s["t"] or t == "R$" or PRECO_RE.match(t) or t.isdigit()
-                        or t.upper().startswith("PCS/CX") or t in ("MONTADO", "DESMONTADO")
-                        or t in ("包好", "散装"))
+
+    def ignora(t):
+        if t == s["t"] or t in ("R$", "R$"):
+            return True
+        if re.match(r'^(?:R\$)?\d+[\.,]\d{2}$', t):
+            return True
+        if t.upper() in ("PCS/CX", "PCS", "CX", "MONTADO", "DESMONTADO", "包好", "散装"):
+            return True
+        return False
+
     pt, cn = [], []
     for w in ws:
         if ignora(w["t"]):
             continue
-        (cn if CJK_RE.search(w["t"]) else pt).append(w["t"])
+        if CJK_RE.search(w["t"]):
+            cn.append(w["t"])
+        else:
+            pt.append(w["t"])
+
     return {
-        "sku": s["t"], "preco_brl": preco, "pcs_cx": pcs,
-        "nome_pt": " ".join(pt), "nome_cn": "".join(cn),
+        "sku": s["t"], 
+        "preco_brl": preco, 
+        "pcs_cx": pcs,
+        "nome_pt": " ".join(pt).strip(), 
+        "nome_cn": "".join(cn).strip(),
         "status_montagem": montagem,
     }
-
 
 def debug_card(s, foto, zona, palavras, imgs):
     r = lambda t: tuple(round(v, 1) for v in t)
     print(f"\n=== DEBUG {s['t']} ===")
     print("sku bbox :", r((s["x0"], s["y0"], s["x1"], s["y1"])))
-    print("foto     :", r(foto))
+    print("foto     :", r(foto) if foto else "Nenhuma")
     print("zona     :", r(zona))
     cx = (s["x0"] + s["x1"]) / 2
     print("imagens na coluna (x sobreposto):")
@@ -179,7 +204,6 @@ def debug_card(s, foto, zona, palavras, imgs):
             dentro = "D" if zona[1] <= w["y0"] <= zona[3] else "-"
             print(f"   {dentro} {r((w['x0'], w['y0'], w['x1'], w['y1']))} {w['t']!r}")
     print("======\n")
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -200,12 +224,14 @@ def main():
                 debug_card(s, foto, zona, palavras, imgs)
             p = extrair_campos(s, zona, palavras)
             p["pagina"] = n
-            salvar(render(foto, a.dpi), str(out / "assets" / "img" / f"{p['sku']}.png"))
+        
+            if foto:
+                salvar(render(foto, a.dpi), str(out / "assets" / "img" / f"{p['sku']}.png"))
+                
             produtos.append(p)
     (out / "produtos.json").write_text(
         json.dumps(produtos, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[{backend}] {len(produtos)} produtos -> {out/'produtos.json'}")
-
 
 if __name__ == "__main__":
     main()

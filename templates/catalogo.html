@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Catálogo Lukton</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 6mm;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #222;
+            background-color: #8be040; /* Fundo verde padrão do catálogo */
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .page-container {
+            background-color: #8be040;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* Cabeçalho */
+        .header {
+            background-color: #8be040;
+            color: white;
+            padding: 8px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .header-logo {
+            font-size: 26px;
+            font-weight: bold;
+            color: #000;
+            letter-spacing: -1px;
+        }
+        .header-novidades {
+            font-size: 18px;
+            font-weight: bold;
+            color: #d32f2f;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .header-icons {
+            display: flex;
+            gap: 20px;
+            font-size: 10px;
+            color: #000;
+            font-weight: bold;
+            text-align: center;
+        }
+        .header-icons div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Grade de Produtos (3 colunas) */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            page-break-inside: avoid;
+            height: 235px;
+            box-sizing: border-box;
+        }
+        .card-top-bar {
+            font-size: 7px;
+            color: #888;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
+        .card-img-container {
+            width: 100%;
+            height: 95px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            background: #fff;
+        }
+        .card-img-container img {
+            max-height: 90px;
+            max-width: 90px;
+            object-fit: contain;
+        }
+        .sku-tag {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: #333;
+            color: white;
+            font-size: 8px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        /* Detalhes do Produto */
+        .product-names {
+            text-align: center;
+            margin: 4px 0;
+            height: 30px;
+            overflow: hidden;
+        }
+        .name-pt {
+            font-weight: bold;
+            font-size: 9px;
+            color: #111;
+            display: block;
+            text-transform: uppercase;
+        }
+        .name-cn {
+            font-size: 9px;
+            color: #555;
+            display: block;
+        }
+        .pcs-row {
+            text-align: center;
+            font-size: 9px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            padding: 0 4px;
+        }
+        .currency {
+            font-size: 10px;
+            color: #2e7d32;
+            font-weight: bold;
+        }
+        .price {
+            font-size: 15px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .badge-montagem {
+            background-color: #8be040;
+            color: #000;
+            font-size: 8px;
+            font-weight: bold;
+            text-align: center;
+            padding: 3px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+        .badge-montagem span {
+            display: block;
+            font-size: 7px;
+            color: #333;
+        }
+
+        /* Rodapé Institucional do Card / Página */
+        .footer-badges {
+            display: flex;
+            justify-content: space-around;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 6px;
+            margin-top: 8px;
+            font-size: 8px;
+            color: #333;
+            text-align: center;
+        }
+        .footer-badge-item strong {
+            display: block;
+            color: #d32f2f;
+            font-size: 8px;
+        }
+
+        /* Rodapé Final */
+        .footer-main {
+            background-color: #8be040;
+            color: #000;
+            text-align: center;
+            padding: 6px;
+            margin-top: 6px;
+            font-weight: bold;
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-container">
+    <!-- Cabeçalho -->
+    <div class="header">
+        <div>
+            <div class="header-logo">LUKTON®</div>
+            <div class="header-novidades">NOVIDADES</div>
+        </div>
+        <div class="header-icons">
+            <div><span>💬 WHATSAPP</span> (11) 95132-9999</div>
+            <div><span>📷 @LUKTONIMPORTS</span> SIGA NOSSO INSTAGRAM</div>
+            <div><span>🛍️ PEDIDOS</span> SOMENTE ATACADO</div>
+        </div>
+    </div>
+
+    <!-- Grade -->
+    <div class="grid-container">
+        {% for p in produtos %}
+        <div class="card">
+            <div class="card-top-bar">
+                <span>LUKTON</span>
+                <span>LUKTON COMPANY PRODUCT DETAILS</span>
+            </div>
+            <div class="card-img-container">
+                <span class="sku-tag">{{ p.sku }}</span>
+                <img src="assets/img/{{ p.sku }}.png" onerror="this.style.display='none'">
+            </div>
+            <div class="product-names">
+                <span class="name-pt">{{ p.nome_pt or 'PRODUTO LUKTON' }}</span>
+                <span class="name-cn">{{ p.nome_cn or '卢克顿产品' }}</span>
+            </div>
+            <div class="pcs-row">
+                {{ p.pcs_cx or '-' }} PCS/CX
+            </div>
+            <div class="price-row">
+                <span class="currency">R$</span>
+                <span class="price">{{ "%.2f"|format(p.preco_brl or 0) }}</span>
+            </div>
+            <div class="badge-montagem">
+                {{ p.status_montagem or 'MONTADO' }}
+                <span>{{ '包好' if (p.status_montagem or '').lower() == 'montado' else '散装' }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Rodapé de Selos -->
+    <div class="footer-badges">
+        <div class="footer-badge-item">
+            <strong>COMPRA SEGURA</strong> Seus dados protegidos
+        </div>
+        <div class="footer-badge-item">
+            <strong>QUALIDADE GARANTIDA</strong> Produtos selecionados
+        </div>
+        <div class="footer-badge-item">
+            <strong>ENVIO RÁPIDO</strong> Para todo o Brasil
+        </div>
+    </div>
+
+    <!-- Rodapé Slogan -->
+    <div class="footer-main">
+        <span>LUKTON®</span>
+        <span>MAIS DO QUE PRODUTOS, SOMOS PARCEIROS DO SEU NEGÓCIO<br>不仅提供产品,更是您生意的合作伙伴</span>
+        <span>LUKTON®</span>
+    </div>
+</div>
+
+</body>
+</html>
