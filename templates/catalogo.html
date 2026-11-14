@@ -1,277 +1,472 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>Catálogo Lukton</title>
-    <style>
-        @page {
-            size: A4;
-            margin: 6mm;
-        }
-        body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            color: #222;
-            background-color: #8be040; /* Fundo verde padrão do catálogo */
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        .page-container {
-            background-color: #8be040;
-            padding: 10px;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<title>Catálogo Lukton</title>
+<!-- Montserrat (online). Sem internet, o navegador usa a próxima fonte da lista. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+@page { size: 210mm 297mm; margin: 0; }
 
-        /* Cabeçalho */
-        .header {
-            background-color: #8be040;
-            color: white;
-            padding: 8px 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        .header-logo {
-            font-size: 26px;
-            font-weight: bold;
-            color: #000;
-            letter-spacing: -1px;
-        }
-        .header-novidades {
-            font-size: 18px;
-            font-weight: bold;
-            color: #d32f2f;
-            text-transform: uppercase;
-            margin-top: 2px;
-        }
-        .header-icons {
-            display: flex;
-            gap: 20px;
-            font-size: 10px;
-            color: #000;
-            font-weight: bold;
-            text-align: center;
-        }
-        .header-icons div {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+:root {
+    --verde-topo: #a4fb2f;
+    --verde-base: #8cf01c;
+    --verde-faixa-1: #bcff58;
+    --verde-faixa-2: #8ef31f;
+    --verde-sombra: #a8ff3c;
+    --vermelho: #e3001b;
+    --verde-preco: #8cf01c;      /* mesmo verde da marca; troque aqui se precisar de mais contraste */
+    --cinza-texto: #4a4a4a;
+    --contorno: #111;
+}
 
-        /* Grade de Produtos (3 colunas) */
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-        .card {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 8px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            page-break-inside: avoid;
-            height: 235px;
-            box-sizing: border-box;
-        }
-        .card-top-bar {
-            font-size: 7px;
-            color: #888;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 2px;
-            text-transform: uppercase;
-        }
-        .card-img-container {
-            width: 100%;
-            height: 95px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            position: relative;
-            background: #fff;
-        }
-        .card-img-container img {
-            max-height: 90px;
-            max-width: 90px;
-            object-fit: contain;
-        }
-        .sku-tag {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            background: #333;
-            color: white;
-            font-size: 8px;
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        
-        /* Detalhes do Produto */
-        .product-names {
-            text-align: center;
-            margin: 4px 0;
-            height: 30px;
-            overflow: hidden;
-        }
-        .name-pt {
-            font-weight: bold;
-            font-size: 9px;
-            color: #111;
-            display: block;
-            text-transform: uppercase;
-        }
-        .name-cn {
-            font-size: 9px;
-            color: #555;
-            display: block;
-        }
-        .pcs-row {
-            text-align: center;
-            font-size: 9px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 4px;
-        }
-        .price-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            padding: 0 4px;
-        }
-        .currency {
-            font-size: 10px;
-            color: #2e7d32;
-            font-weight: bold;
-        }
-        .price {
-            font-size: 15px;
-            font-weight: bold;
-            color: #2e7d32;
-        }
-        .badge-montagem {
-            background-color: #8be040;
-            color: #000;
-            font-size: 8px;
-            font-weight: bold;
-            text-align: center;
-            padding: 3px;
-            border-radius: 4px;
-            text-transform: uppercase;
-        }
-        .badge-montagem span {
-            display: block;
-            font-size: 7px;
-            color: #333;
-        }
+* { box-sizing: border-box; }
 
-        /* Rodapé Institucional do Card / Página */
-        .footer-badges {
-            display: flex;
-            justify-content: space-around;
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 6px;
-            margin-top: 8px;
-            font-size: 8px;
-            color: #333;
-            text-align: center;
-        }
-        .footer-badge-item strong {
-            display: block;
-            color: #d32f2f;
-            font-size: 8px;
-        }
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--verde-base);   /* evita faixa branca no rodapé por arredondamento */
+}
 
-        /* Rodapé Final */
-        .footer-main {
-            background-color: #8be040;
-            color: #000;
-            text-align: center;
-            padding: 6px;
-            margin-top: 6px;
-            font-weight: bold;
-            font-size: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-    </style>
+body {
+    font-family: 'Montserrat', 'Segoe UI', Arial, 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+    color: #222;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* ------------------------------------------------------------ página */
+.pagina {
+    width: 210mm;
+    height: 296.5mm;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+    break-after: page;
+    page-break-after: always;
+}
+.pagina:last-child {
+    break-after: auto;
+    page-break-after: auto;
+}
+
+/* Texto branco com contorno escuro (logo, cabeçalho, rodapé) */
+.contornado {
+    color: #fff;
+    -webkit-text-stroke: 3px var(--contorno);
+    paint-order: stroke fill;
+}
+
+/* ------------------------------------------------------------ cabeçalho */
+.topo {
+    position: relative;
+    flex: none;
+    height: 108px;
+    background: linear-gradient(180deg, var(--verde-topo) 0%, var(--verde-base) 100%);
+    padding-left: 80px;
+    display: flex;
+    align-items: center;
+}
+.marca {
+    width: 257px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1;
+}
+.logo-txt {
+    font-weight: 600;
+    letter-spacing: -1px;
+    text-shadow: 2px 3px 0 var(--contorno);
+}
+.logo-txt sup {
+    font-size: 0.28em;
+    vertical-align: super;
+    letter-spacing: 0;
+    -webkit-text-stroke: 0;
+}
+.marca .logo-txt { font-size: 42px; }
+.marca .logo-img { height: 46px; width: auto; max-width: 240px; }
+.titulo-pagina {
+    margin-top: 4px;
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--vermelho);
+    -webkit-text-stroke: 4px #fff;
+    paint-order: stroke fill;
+    text-transform: uppercase;
+}
+
+.divisor {
+    position: absolute;
+    left: 337px;
+    top: 20px;
+    height: 68px;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.contatos {
+    position: absolute;
+    left: 345px;
+    right: 22px;
+    top: 14px;
+    bottom: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+}
+.contato {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
+    line-height: 1.25;
+}
+.contato svg {
+    width: 31px;
+    height: 31px;
+    margin-bottom: 7px;
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 1px #000) drop-shadow(1px 1px 0 #000);
+}
+.contato .t {
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    -webkit-text-stroke: 2.2px var(--contorno);
+    color: #fff;
+    paint-order: stroke fill;
+}
+.contato .cn {
+    font-size: 8.5px;
+    font-weight: 700;
+    -webkit-text-stroke: 2px var(--contorno);
+    color: #fff;
+    paint-order: stroke fill;
+}
+
+/* ------------------------------------------------------------ corpo / grade */
+.corpo {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    padding: 14px 78px 4px 74px;
+    background: linear-gradient(180deg, #e4e4e4 0%, #f3f3f3 28%, #ffffff 62%);
+}
+.grade {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    column-gap: 19px;
+    row-gap: 22px;
+    padding: 0 10px 10px 0;   /* espaço para a sombra verde do card */
+    min-height: 0;
+}
+
+/* ------------------------------------------------------------ card */
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 9px 9px 0 var(--verde-sombra);
+}
+.foto {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 5px 5px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+}
+.foto img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.sem-foto {
+    font-size: 10px;
+    font-weight: 600;
+    color: #aaa;
+    letter-spacing: 1px;
+}
+
+.sku {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 14.5px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: #1f1f1f;
+}
+.nome {
+    padding: 0 6px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.18;
+    text-transform: uppercase;
+    color: var(--cinza-texto);
+}
+.nome.longo { font-size: 10px; }
+.nome.cn { text-transform: none; }
+.pcs {
+    margin-top: 1px;
+    text-align: center;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #444;
+}
+
+.preco {
+    margin-top: 3px;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1.1;
+}
+.moeda {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+}
+.antigo {
+    font-size: 20px;
+    font-weight: 600;
+    color: #6b6b6b;
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+}
+.novo {
+    font-size: 23px;
+    font-weight: 800;
+    color: var(--verde-preco);
+}
+.novo.promo { color: var(--vermelho); }
+
+.faixa {
+    position: relative;
+    flex: none;
+    height: 38px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, var(--verde-faixa-1) 0%, var(--verde-faixa-2) 100%);
+}
+.faixa .mini {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+}
+.faixa .mini .logo-txt {
+    font-size: 11px;
+    letter-spacing: 0;
+    -webkit-text-stroke: 2.2px var(--contorno);
+    text-shadow: none;
+}
+.faixa .mini .logo-img { height: 14px; width: auto; }
+.status {
+    padding-left: 30px;          /* reserva o espaço da logo mini à esquerda */
+    text-align: center;
+    line-height: 1.05;
+    font-size: 13px;
+    font-weight: 800;
+    color: #111;
+    text-transform: uppercase;
+}
+.status.longo { font-size: 11.5px; }
+.status small {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* ------------------------------------------------------------ rodapé */
+.selos {
+    flex: none;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 46px;
+    background: #fff;
+}
+.selo {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    line-height: 1.2;
+}
+.selo svg {
+    width: 26px;
+    height: 26px;
+    fill: none;
+    stroke: #8a8a8a;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.selo b {
+    display: block;
+    font-size: 8px;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+}
+.selo span {
+    display: block;
+    font-size: 6.5px;
+    font-weight: 500;
+    color: #888;
+}
+
+.rodape {
+    flex: none;
+    height: 58px;
+    padding: 0 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(180deg, var(--verde-topo) 0%, var(--verde-base) 100%);
+}
+.rodape .logo-txt { font-size: 24px; }
+.rodape .logo-img { height: 28px; width: auto; }
+.slogan {
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #fff;
+    -webkit-text-stroke: 3px var(--contorno);
+    paint-order: stroke fill;
+}
+.slogan small {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+}
+</style>
 </head>
 <body>
 
-<div class="page-container">
+{% macro logo() -%}
+    {%- if logo_uri -%}
+        <img class="logo-img" src="{{ logo_uri }}" alt="LUKTON">
+    {%- else -%}
+        <span class="logo-txt contornado">LUKTON<sup>®</sup></span>
+    {%- endif -%}
+{%- endmacro %}
+
+{% for pagina in paginas %}
+<section class="pagina">
+
     <!-- Cabeçalho -->
-    <div class="header">
-        <div>
-            <div class="header-logo">LUKTON®</div>
-            <div class="header-novidades">NOVIDADES</div>
+    <header class="topo">
+        <div class="marca">
+            {{ logo() }}
+            <div class="titulo-pagina">{{ titulo }}</div>
         </div>
-        <div class="header-icons">
-            <div><span>💬 WHATSAPP</span> (11) 95132-9999</div>
-            <div><span>📷 @LUKTONIMPORTS</span> SIGA NOSSO INSTAGRAM</div>
-            <div><span>🛍️ PEDIDOS</span> SOMENTE ATACADO</div>
+        <div class="divisor"></div>
+        <div class="contatos">
+            <div class="contato">
+                <svg viewBox="0 0 32 32"><path d="M16 4a12 12 0 0 0-10.3 18l-1.7 6 6.2-1.6A12 12 0 1 0 16 4z"/><path d="M11.5 10.5c.5-.6 1.3-.5 1.6.2l.8 1.8c.2.5 0 1-.4 1.4l-.5.5c.9 1.7 2.3 3 4 3.9l.6-.6c.4-.4.9-.5 1.4-.3l1.7.8c.7.3.8 1.1.3 1.7-1 1.3-2.5 1.6-4.3 1-3.3-1.2-6-3.9-7-7.2-.4-1.4 0-2.7 1.8-4.4z"/></svg>
+                <div class="t">WHATSAPP</div>
+                <div class="t">{{ whatsapp }}</div>
+            </div>
+            <div class="contato">
+                <svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="6"/><circle cx="16" cy="16" r="5.2"/><circle cx="22.2" cy="9.8" r="1" fill="#fff"/></svg>
+                <div class="t">{{ instagram }}</div>
+                <div class="t">SIGA NOSSO INSTAGRAM</div>
+                <div class="cn">关注我们的Instagram</div>
+            </div>
+            <div class="contato">
+                <svg viewBox="0 0 32 32"><path d="M7 10h18l1.5 17h-21z"/><path d="M11.5 14V9a4.5 4.5 0 0 1 9 0v5"/></svg>
+                <div class="t">PEDIDOS</div>
+                <div class="cn">订单</div>
+                <div class="t">SOMENTE ATACADO</div>
+                <div class="cn">仅限批发</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Grade 3 x 3 -->
+    <main class="corpo">
+        <div class="grade">
+            {% for p in pagina %}
+            <article class="card">
+                <div class="foto">
+                    {% if p.imagem %}
+                    <img src="{{ p.imagem }}" alt="{{ p.sku }}">
+                    {% else %}
+                    <span class="sem-foto">SEM IMAGEM</span>
+                    {% endif %}
+                </div>
+                <div class="sku">{{ p.sku }}</div>
+                {% if p.nome_pt %}<div class="nome{% if p.nome_pt|length > 30 %} longo{% endif %}">{{ p.nome_pt }}</div>{% endif %}
+                {% if p.nome_cn %}<div class="nome cn{% if p.nome_cn|length > 18 %} longo{% endif %}">{{ p.nome_cn }}</div>{% endif %}
+                {% if p.pcs_cx is not none %}<div class="pcs">{{ p.pcs_cx }} PCS/CX</div>{% endif %}
+                <div class="preco">
+                    <span class="moeda">R$</span>
+                    {% if p.preco_antigo_fmt %}<span class="antigo">{{ p.preco_antigo_fmt }}</span>{% endif %}
+                    <span class="novo{% if p.promocional %} promo{% endif %}">{{ p.preco_fmt if p.preco_fmt else '--' }}</span>
+                </div>
+                <div class="faixa">
+                    <div class="mini">{{ logo() }}</div>
+                    {% if p.status_pt %}
+                    <div class="status{% if p.status_pt|length > 8 %} longo{% endif %}">{{ p.status_pt }}<small>{{ p.status_cn }}</small></div>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </main>
+
+    <!-- Selos -->
+    <div class="selos">
+        <div class="selo">
+            <svg viewBox="0 0 32 32"><path d="M16 4l9 3.5v7c0 6-4 10.5-9 13-5-2.5-9-7-9-13v-7z"/><path d="M12 15.5l3 3 5-6"/></svg>
+            <div><b>Compra segura 交易安全</b><span>Seus dados protegidos 数据受保护</span></div>
+        </div>
+        <div class="selo">
+            <svg viewBox="0 0 32 32"><circle cx="16" cy="13" r="7"/><path d="M12 19l-2 9 6-3 6 3-2-9"/><path d="M13 13l2 2 4-4"/></svg>
+            <div><b>Qualidade garantida 品质保证</b><span>Produtos selecionados 精选产品</span></div>
+        </div>
+        <div class="selo">
+            <svg viewBox="0 0 32 32"><path d="M3 8h16v13H3z"/><path d="M19 12h5l4 4v5h-9z"/><circle cx="9" cy="23" r="2.5"/><circle cx="23" cy="23" r="2.5"/></svg>
+            <div><b>Envio rápido 快速发货</b><span>Para todo o Brasil 发往巴西全境</span></div>
         </div>
     </div>
 
-    <!-- Grade -->
-    <div class="grid-container">
-        {% for p in produtos %}
-        <div class="card">
-            <div class="card-top-bar">
-                <span>LUKTON</span>
-                <span>LUKTON COMPANY PRODUCT DETAILS</span>
-            </div>
-            <div class="card-img-container">
-                <span class="sku-tag">{{ p.sku }}</span>
-                <img src="assets/img/{{ p.sku }}.png" onerror="this.style.display='none'">
-            </div>
-            <div class="product-names">
-                <span class="name-pt">{{ p.nome_pt or 'PRODUTO LUKTON' }}</span>
-                <span class="name-cn">{{ p.nome_cn or '卢克顿产品' }}</span>
-            </div>
-            <div class="pcs-row">
-                {{ p.pcs_cx or '-' }} PCS/CX
-            </div>
-            <div class="price-row">
-                <span class="currency">R$</span>
-                <span class="price">{{ "%.2f"|format(p.preco_brl or 0) }}</span>
-            </div>
-            <div class="badge-montagem">
-                {{ p.status_montagem or 'MONTADO' }}
-                <span>{{ '包好' if (p.status_montagem or '').lower() == 'montado' else '散装' }}</span>
-            </div>
+    <!-- Rodapé -->
+    <footer class="rodape">
+        {{ logo() }}
+        <div class="slogan">
+            MAIS DO QUE PRODUTOS, SOMOS PARCEIROS DO SEU NEGÓCIO
+            <small>不仅提供产品，更是您生意的合作伙伴</small>
         </div>
-        {% endfor %}
-    </div>
+        {{ logo() }}
+    </footer>
 
-    <!-- Rodapé de Selos -->
-    <div class="footer-badges">
-        <div class="footer-badge-item">
-            <strong>COMPRA SEGURA</strong> Seus dados protegidos
-        </div>
-        <div class="footer-badge-item">
-            <strong>QUALIDADE GARANTIDA</strong> Produtos selecionados
-        </div>
-        <div class="footer-badge-item">
-            <strong>ENVIO RÁPIDO</strong> Para todo o Brasil
-        </div>
-    </div>
-
-    <!-- Rodapé Slogan -->
-    <div class="footer-main">
-        <span>LUKTON®</span>
-        <span>MAIS DO QUE PRODUTOS, SOMOS PARCEIROS DO SEU NEGÓCIO<br>不仅提供产品,更是您生意的合作伙伴</span>
-        <span>LUKTON®</span>
-    </div>
-</div>
+</section>
+{% endfor %}
 
 </body>
 </html>
