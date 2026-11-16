@@ -16,6 +16,9 @@
     --verde-faixa-2: #8ef31f;
     --verde-sombra: #a8ff3c;
     --vermelho: #e3001b;
+    --logo-topo: 176px;          /* largura da logo no cabeçalho (era o texto de 42px) */
+    --logo-mini: 56px;           /* largura da logo na faixa verde de cada card */
+    --logo-rodape: 108px;        /* largura da logo no rodapé */
     --verde-preco: #8cf01c;      /* mesmo verde da marca; troque aqui se precisar de mais contraste */
     --cinza-texto: #4a4a4a;
     --contorno: #111;
@@ -88,7 +91,7 @@ body {
     -webkit-text-stroke: 0;
 }
 .marca .logo-txt { font-size: 42px; }
-.marca .logo-img { height: 46px; width: auto; max-width: 240px; }
+.marca .logo-img { width: var(--logo-topo); height: auto; }
 .titulo-pagina {
     margin-top: 4px;
     font-size: 27px;
@@ -282,7 +285,7 @@ body {
     -webkit-text-stroke: 2.2px var(--contorno);
     text-shadow: none;
 }
-.faixa .mini .logo-img { height: 14px; width: auto; }
+.faixa .mini .logo-img { width: var(--logo-mini); height: auto; }
 .status {
     padding-left: 30px;          /* reserva o espaço da logo mini à esquerda */
     text-align: center;
@@ -348,7 +351,7 @@ body {
     background: linear-gradient(180deg, var(--verde-topo) 0%, var(--verde-base) 100%);
 }
 .rodape .logo-txt { font-size: 24px; }
-.rodape .logo-img { height: 28px; width: auto; }
+.rodape .logo-img { width: var(--logo-rodape); height: auto; }
 .slogan {
     text-align: center;
     font-size: 12.5px;
@@ -382,7 +385,7 @@ body {
     <header class="topo">
         <div class="marca">
             {{ logo() }}
-            <div class="titulo-pagina">{{ titulo }}</div>
+            {% if pagina.titulo %}<div class="titulo-pagina">{{ pagina.titulo }}</div>{% endif %}
         </div>
         <div class="divisor"></div>
         <div class="contatos">
@@ -410,7 +413,7 @@ body {
     <!-- Grade 3 x 3 -->
     <main class="corpo">
         <div class="grade">
-            {% for p in pagina %}
+            {% for p in pagina.produtos %}
             <article class="card">
                 <div class="foto">
                     {% if p.imagem %}
