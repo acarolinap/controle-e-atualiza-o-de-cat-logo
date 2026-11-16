@@ -218,11 +218,16 @@ body {
 .nome {
     padding: 0 6px;
     text-align: center;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 500;
-    line-height: 1.18;
+    line-height: 1.15;
     text-transform: uppercase;
     color: var(--cinza-texto);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .nome.longo { font-size: 10px; }
 .nome.cn { text-transform: none; }
@@ -429,7 +434,7 @@ body {
                 <div class="preco">
                     <span class="moeda">R$</span>
                     {% if p.preco_antigo_fmt %}<span class="antigo">{{ p.preco_antigo_fmt }}</span>{% endif %}
-                    <span class="novo{% if p.promocional %} promo{% endif %}">{{ p.preco_fmt if p.preco_fmt else '--' }}</span>
+                    <span class="novo{% if p.promocional %} promo{% endif %}">{{ p.preco_fmt if p.preco_fmt is not none else '00,00' }}</span>
                 </div>
                 <div class="faixa">
                     <div class="mini">{{ logo() }}</div>

@@ -1,25 +1,4 @@
-"""Fase 2 - Sincroniza os JSONs da Fase 1 com o PostgreSQL.
-
-Uso (a ORDEM dos arquivos importa: o último prevalece sobre os anteriores):
-  python fase2_banco.py saida_geral/produtos.json saida/produtos.json
-  python fase2_banco.py saida_geral/produtos.json saida/produtos.json --dry-run
-
-Regras:
-  * Aceita os dois perfis da Fase 1. Preço: usa `preco_brl` e, se não houver,
-    `preco_cn` (o Unid.CX do catálogo geral, assumido como R$).
-  * Valores vazios NUNCA apagam o que já está no banco (COALESCE): o geral não
-    traz nome_pt/status e não zera o que veio do traduzido.
-  * Preço 0,00 é tratado como ausente.
-  * SKU nulo é pulado e vai para o relatório de auditoria.
-  * SKU repetido (no mesmo arquivo ou entre arquivos): por padrão a última
-    ocorrência vence (`--prioridade primeiro` inverte). Todo conflito de
-    preço/volume é listado no relatório.
-  * Só grava o que é novo ou mudou (data_atualizacao só muda quando há mudança).
-  * Tudo numa transação: se algo falhar, nada é gravado.
-
-Saída: um CSV de auditoria (padrão saida/auditoria_fase2.csv) para revisar/importar
-na planilha antes de gerar o PDF.
-"""
+"""Fase 2 - Sincroniza os JSONs da Fase 1 com o PostgreSQL (preservando layout exato)."""
 import argparse
 import csv
 import json
@@ -35,9 +14,13 @@ DB_CONFIG = {
     "port": os.getenv("DB_PORT", "5432"),
 }
 
+DE_PARA_SKU = {
+    "BZ6092-800": "BZ6082-800",
+}
+
 CAMPOS = ("preco_brl", "pcs_cx", "nome_pt", "nome_cn", "status_montagem")
 CAMPOS_AUDITADOS = {"preco_brl": "preco_alterado", "pcs_cx": "pcs_alterado"}
-CAMPOS_CONFLITO = ("preco_brl", "pcs_cx", "status_montagem")   # divergências entre ocorrências do SKU
+CAMPOS_CONFLITO = ("preco_brl", "pcs_cx", "status_montagem")
 
 DDL = """
 CREATE TABLE IF NOT EXISTS catalogo_produtos (
@@ -51,6 +34,13 @@ CREATE TABLE IF NOT EXISTS catalogo_produtos (
     data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS pagina_origem INTEGER;
+
+CREATE TABLE IF NOT EXISTS catalogo_layout (
+    pagina INTEGER NOT NULL,
+    ordem_pagina INTEGER NOT NULL,
+    sku VARCHAR(50) NOT NULL,
+    PRIMARY KEY (pagina, ordem_pagina)
+);
 """
 
 UPSERT = """
@@ -68,7 +58,6 @@ ON CONFLICT (sku) DO UPDATE SET
 """
 
 
-# ------------------------------------------------------------ leitura/normalização
 def _texto(v):
     if v is None:
         return None
@@ -86,25 +75,29 @@ def _num(v, tipo):
 
 
 def normalizar(p, arquivo):
-    """Converte um item do JSON (qualquer perfil) no formato do banco."""
-    sku = _texto(p.get("sku"))
+    sku_raw = _texto(p.get("sku"))
+    sku = sku_raw.upper() if sku_raw else None
+    if sku in DE_PARA_SKU:
+        sku = DE_PARA_SKU[sku]
+
     preco = _num(p.get("preco_brl") if p.get("preco_brl") is not None else p.get("preco_cn"), float)
     flags = []
     if preco == 0:
         flags.append("preco_zerado")
     status = _texto(p.get("status_montagem"))
+    eh_geral = "preco_cn" in p
     return {
-        "sku": sku.upper() if sku else None,
+        "sku": sku,
         "preco_brl": preco,
         "pcs_cx": _num(p.get("pcs_cx"), int),
         "nome_pt": _texto(p.get("nome_pt")),
         "nome_cn": _texto(p.get("nome_cn")),
         "status_montagem": status.lower() if status else None,
-        # a página só faz sentido para o catálogo geral (perfil com preco_cn)
-        "pagina_origem": _num(p.get("pagina"), int) if "preco_cn" in p else None,
+        "pagina_origem": _num(p.get("pagina"), int) if eh_geral else None,
+        "ordem_pagina": _num(p.get("ordem_pagina"), int) if eh_geral else None,
+        "eh_geral": eh_geral,
         "origem": f"{Path(arquivo).parent.name}/{Path(arquivo).name}:pág {p.get('pagina', '?')}",
         "flags": flags,
-        "avisos_fase1": list(p.get("avisos") or []),
     }
 
 
@@ -116,20 +109,24 @@ def carregar_registros(caminhos):
     return registros
 
 
-# ------------------------------------------------------------------- mesclagem
 def mesclar(registros, prioridade="ultimo"):
-    """Junta ocorrências do mesmo SKU. Retorna (por_sku, pulados, conflitos)."""
-    por_sku, pulados, conflitos = {}, [], []
+    por_sku, pulados, conflitos, layout = {}, [], [], []
     for r in registros:
         if not r["sku"]:
             pulados.append(r)
             continue
+
+        # Registra a posição exata no layout se vier do catálogo geral
+        if r["eh_geral"] and r["pagina_origem"] and r["ordem_pagina"]:
+            layout.append((r["pagina_origem"], r["ordem_pagina"], r["sku"]))
+
         atual = por_sku.get(r["sku"])
         if atual is None:
             novo = dict(r)
             novo["_orig"] = {c: r["origem"] for c in (*CAMPOS, "pagina_origem") if r[c] is not None}
             por_sku[r["sku"]] = novo
             continue
+
         atual["flags"] = sorted(set(atual["flags"]) | set(r["flags"]))
         for campo in CAMPOS_CONFLITO:
             a, b = atual[campo], r[campo]
@@ -144,7 +141,9 @@ def mesclar(registros, prioridade="ultimo"):
             novo = r[campo]
             if novo is None:
                 continue
-            # a página de origem sempre mantém a primeira ocorrência
+            # Não deixa preço nulo ou 0 sobrescrever preço válido existente
+            if campo == "preco_brl" and novo == 0 and atual[campo] not in (None, 0):
+                continue
             if campo == "pagina_origem":
                 sobrescreve = atual[campo] is None
             else:
@@ -152,12 +151,10 @@ def mesclar(registros, prioridade="ultimo"):
             if sobrescreve:
                 atual[campo] = novo
                 atual["_orig"][campo] = r["origem"]
-    return por_sku, pulados, conflitos
+    return por_sku, pulados, conflitos, layout
 
 
-# --------------------------------------------------------------------- diff
 def comparar(por_sku, existentes):
-    """Compara com o que já está no banco. Retorna (novos, alterados, para_gravar)."""
     novos, alterados, para_gravar = [], [], []
     for sku, r in por_sku.items():
         ex = existentes.get(sku)
@@ -169,12 +166,12 @@ def comparar(por_sku, existentes):
         for campo in (*CAMPOS, "pagina_origem"):
             novo = r[campo]
             if novo is None:
-                continue                      # vazio nunca apaga
+                continue
             antigo = ex.get(campo)
             if campo == "preco_brl" and antigo is not None:
                 antigo = round(float(antigo), 2)
             if campo == "pagina_origem" and antigo is not None:
-                continue                      # mantém a primeira página registrada
+                continue
             if antigo != novo:
                 mudancas.append((campo, antigo, novo))
         if mudancas:
@@ -189,10 +186,6 @@ def linhas_auditoria(novos, alterados, pulados, conflitos, por_sku):
         linhas.append({"tipo": "novo", "sku": r["sku"], "campo": "", "valor_anterior": "",
                        "valor_novo": r["preco_brl"] if r["preco_brl"] is not None else "",
                        "origem": r["origem"], "detalhe": r["nome_pt"] or r["nome_cn"] or ""})
-        if r["preco_brl"] is None:
-            linhas.append({"tipo": "sem_preco", "sku": r["sku"], "campo": "preco_brl",
-                           "valor_anterior": "", "valor_novo": "", "origem": r["origem"],
-                           "detalhe": "preço ausente ou zerado: não publicar sem corrigir"})
     for r, mudancas in alterados:
         for campo, antigo, novo in mudancas:
             linhas.append({"tipo": CAMPOS_AUDITADOS.get(campo, "campo_alterado"), "sku": r["sku"],
@@ -205,64 +198,52 @@ def linhas_auditoria(novos, alterados, pulados, conflitos, por_sku):
                        "valor_novo": r["preco_brl"] if r["preco_brl"] is not None else "",
                        "origem": r["origem"],
                        "detalhe": " | ".join(filter(None, [r["nome_pt"], r["nome_cn"]])) or "(sem nome)"})
-    for r in por_sku.values():
-         if "preco_zerado" in r["flags"] and r["preco_brl"] == 0:
-            linhas.append({"tipo": "preco_zerado", "sku": r["sku"], "campo": "preco_brl",
-                           "valor_anterior": "", "valor_novo": "", "origem": r["origem"],
-                           "detalhe": "Unid.CX = 0,00 no PDF de origem"})
     return linhas
 
 
 def salvar_auditoria(linhas, caminho):
     Path(caminho).parent.mkdir(parents=True, exist_ok=True)
     cols = ["tipo", "sku", "campo", "valor_anterior", "valor_novo", "origem", "detalhe"]
-    with open(caminho, "w", newline="", encoding="utf-8-sig") as f:   # utf-8-sig: abre bem no Excel
+    with open(caminho, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
         w.writerows(linhas)
 
 
-# ------------------------------------------------------------------- banco
 def carregar_existentes(conn):
     with conn.cursor() as cur:
         cur.execute("SELECT to_regclass('catalogo_produtos')")
         if cur.fetchone()[0] is None:
             return {}
-        cur.execute("""SELECT sku, preco_brl, pcs_cx, nome_pt, nome_cn, status_montagem
+        cur.execute("""SELECT sku, preco_brl, pcs_cx, nome_pt, nome_cn, status_montagem, pagina_origem
                        FROM catalogo_produtos""")
         cols = [d[0] for d in cur.description]
-        existentes = {row[0]: dict(zip(cols, row)) for row in cur.fetchall()}
-        cur.execute("""SELECT 1 FROM information_schema.columns
-                       WHERE table_name = 'catalogo_produtos' AND column_name = 'pagina_origem'""")
-        if cur.fetchone():
-            cur.execute("SELECT sku, pagina_origem FROM catalogo_produtos")
-            for sku, pag in cur.fetchall():
-                existentes[sku]["pagina_origem"] = pag
-        return existentes
+        return {row[0]: dict(zip(cols, row)) for row in cur.fetchall()}
 
 
-def gravar(conn, para_gravar):
+def gravar(conn, para_gravar, layout):
     from psycopg2.extras import execute_values
-    valores = [(r["sku"], r["preco_brl"], r["pcs_cx"], r["nome_pt"], r["nome_cn"],
-                r["status_montagem"], r["pagina_origem"]) for r in para_gravar]
     with conn.cursor() as cur:
-        execute_values(cur, UPSERT, valores)
+        if para_gravar:
+            valores = [(r["sku"], r["preco_brl"], r["pcs_cx"], r["nome_pt"], r["nome_cn"],
+                        r["status_montagem"], r["pagina_origem"]) for r in para_gravar]
+            execute_values(cur, UPSERT, valores)
+        if layout:
+            cur.execute("TRUNCATE TABLE catalogo_layout")
+            execute_values(cur, "INSERT INTO catalogo_layout (pagina, ordem_pagina, sku) VALUES %s", layout)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Sincroniza os JSONs da Fase 1 com o PostgreSQL.")
-    ap.add_argument("json", nargs="*", default=["saida/produtos.json"],
-                    help="um ou mais produtos.json; o último tem prioridade")
-    ap.add_argument("--prioridade", choices=["ultimo", "primeiro"], default="ultimo",
-                    help="qual ocorrência vence quando o SKU se repete (padrão: ultimo)")
+    ap.add_argument("json", nargs="*", default=["saida_geral/produtos.json", "saida/produtos.json"])
+    ap.add_argument("--prioridade", choices=["ultimo", "primeiro"], default="ultimo")
     ap.add_argument("--auditoria", default="saida/auditoria_fase2.csv")
-    ap.add_argument("--dry-run", action="store_true", help="só calcula e gera o CSV; não grava")
+    ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
     registros = carregar_registros(a.json)
-    por_sku, pulados, conflitos = mesclar(registros, a.prioridade)
-    print(f"Lidos: {len(registros)} registros | SKUs únicos: {len(por_sku)} "
-          f"| sem SKU (pulados): {len(pulados)} | conflitos de preço/volume/status: {len(conflitos)}")
+    por_sku, pulados, conflitos, layout = mesclar(registros, a.prioridade)
+    print(f"Lidos: {len(registros)} | SKUs únicos: {len(por_sku)} | Slots de layout: {len(layout)}")
 
     import psycopg2
     conn = psycopg2.connect(**DB_CONFIG)
@@ -273,7 +254,7 @@ def main():
         existentes = carregar_existentes(conn)
         novos, alterados, para_gravar = comparar(por_sku, existentes)
         if not a.dry_run:
-            gravar(conn, para_gravar)
+            gravar(conn, para_gravar, layout)
             conn.commit()
         else:
             conn.rollback()
@@ -286,20 +267,7 @@ def main():
 
     linhas = linhas_auditoria(novos, alterados, pulados, conflitos, por_sku)
     salvar_auditoria(linhas, a.auditoria)
-
-    n_preco = sum(1 for _, m in alterados if any(c == "preco_brl" for c, _, _ in m))
-    n_pcs = sum(1 for _, m in alterados if any(c == "pcs_cx" for c, _, _ in m))
-    sem_preco = sum(1 for l in linhas if l["tipo"] == "sem_preco")
-    print("\n=== RESUMO DA AUDITORIA" + (" (DRY-RUN: nada gravado)" if a.dry_run else "") + " ===")
-    print(f"SKUs novos:               {len(novos)}")
-    print(f"SKUs com preço alterado:  {n_preco}")
-    print(f"SKUs com volume alterado: {n_pcs}")
-    print(f"Outros campos alterados:  {len(alterados)} SKUs no total com alguma mudança")
-    print(f"Novos sem preço:          {sem_preco}")
-    print(f"Registros sem SKU:        {len(pulados)}")
-    print(f"Conflitos (preço/volume/status): {len(conflitos)}")
-    print(f"Relatório: {a.auditoria}")
-    print("=" * 44)
+    print(f"Novos: {len(novos)} | Alterados: {len(alterados)} | Layout gravado: {len(layout)} cards.")
 
 
 if __name__ == "__main__":

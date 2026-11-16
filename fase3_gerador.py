@@ -75,11 +75,13 @@ PAGINAS_POR_LOTE = 12                    # 12 x 9 = 108 produtos por PDF parcial
 COLUNAS_OPCIONAIS = ("preco_promocional", "secao")
 
 SQL = """
-    SELECT sku, preco_brl, {preco_promocional} AS preco_promocional, {secao} AS secao,
-           pcs_cx, nome_pt, nome_cn, status_montagem, pagina_origem
-    FROM catalogo_produtos
-    WHERE status_publicacao = 'ativo'
-    ORDER BY pagina_origem NULLS LAST, sku;
+    SELECT l.pagina AS pagina_layout, l.ordem_pagina,
+           p.sku, p.preco_brl, {preco_promocional} AS preco_promocional, {secao} AS secao,
+           p.pcs_cx, p.nome_pt, p.nome_cn, p.status_montagem, p.pagina_origem
+    FROM catalogo_layout l
+    JOIN catalogo_produtos p ON p.sku = l.sku
+    WHERE p.status_publicacao = 'ativo'
+    ORDER BY l.pagina ASC, l.ordem_pagina ASC;
 """
 
 
@@ -185,6 +187,7 @@ def preparar_produtos(linhas):
         promo = r.get("preco_promocional")
         com_preco_promo = promo is not None and float(promo) > 0
         produtos.append({
+            "pagina_layout": r["pagina_layout"],
             "sku": r["sku"],
             "secao": secao,
             "nome_pt": limpar_texto(r.get("nome_pt")),
@@ -196,6 +199,7 @@ def preparar_produtos(linhas):
             "status_pt": status_pt,
             "status_cn": status_cn,
             "imagem": localizar_imagem(r["sku"]),
+            
         })
     return produtos
 
@@ -218,26 +222,21 @@ def relatar_lacunas(produtos):
 
 
 def em_paginas(produtos, por_pagina=CARDS_POR_PAGINA):
-    """Agrupa em páginas de 9 sem misturar seções; cada página leva o título da sua seção."""
-    paginas = []
-    grupo, secao_atual = [], None
-
-    def fechar():
-        for i in range(0, len(grupo), por_pagina):
-            paginas.append({
-                "produtos": grupo[i:i + por_pagina],
-                "secao": secao_atual,
-                "titulo": TITULOS.get(secao_atual),
-            })
-
+    """Agrupa exatamente pelo número da página original do catálogo chinês."""
+    grupos = {}
     for p in produtos:
-        if grupo and p["secao"] != secao_atual:
-            fechar()
-            grupo = []
-        secao_atual = p["secao"]
-        grupo.append(p)
-    if grupo:
-        fechar()
+        pag = p["pagina_layout"]
+        grupos.setdefault(pag, []).append(p)
+
+    paginas = []
+    for pag in sorted(grupos):
+        itens = grupos[pag]
+        secao = next((x["secao"] for x in itens if x["secao"]), None)
+        paginas.append({
+            "produtos": itens,
+            "secao": secao,
+            "titulo": TITULOS.get(secao),
+        })
     return paginas
 
 

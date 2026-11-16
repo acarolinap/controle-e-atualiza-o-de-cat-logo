@@ -1,0 +1,92 @@
+[
+  {
+    "sku": "ZJT-005",
+    "nome_cn": "V8 转 苹果 适配器",
+    "nome_pt": "Adaptador V8 para Iphone",
+    "preco_cn": 1.2,
+    "pcs_cx": 2000,
+    "status_montagem": null,
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "YHL-888",
+    "nome_cn": "MicroUSB 转 USB 适配器",
+    "nome_pt": "Adaptador Micro USB para USB",
+    "preco_cn": 0.8,
+    "pcs_cx": 2000,
+    "status_montagem": null,
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-008",
+    "nome_cn": "转接头",
+    "nome_pt": "Adaptador Tipo-C",
+    "preco_cn": 1.6,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-009",
+    "nome_cn": "转接头",
+    "nome_pt": null,
+    "preco_cn": 1.8,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-016",
+    "nome_cn": "OTG转换头",
+    "nome_pt": null,
+    "preco_cn": 1.8,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-019",
+    "nome_cn": "转换器",
+    "nome_pt": null,
+    "preco_cn": 1.8,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-007",
+    "nome_cn": null,
+    "nome_pt": "TPC-USB",
+    "preco_cn": 1.3,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-015",
+    "nome_cn": "转接器USB转TPC",
+    "nome_pt": null,
+    "preco_cn": 1.3,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  },
+  {
+    "sku": "ZJT-014",
+    "nome_cn": "tpc转接头",
+    "nome_pt": null,
+    "preco_cn": 1.3,
+    "pcs_cx": 2000,
+    "status_montagem": "desmontado",
+    "avisos": [],
+    "pagina": 87
+  }
+]

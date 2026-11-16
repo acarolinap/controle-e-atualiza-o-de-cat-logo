@@ -19,7 +19,8 @@ from pathlib import Path
 
 # --- comuns
 SKU_RE = re.compile(r"^[A-Z]{1,5}-\d{1,5}[A-Z]?$")             # palavra isolada
-SKU_SOLTO_RE = re.compile(r"[A-Za-z]{1,5}\d{0,5}(?:-[A-Za-z0-9]{1,6})+")   # dentro de uma linha
+SKU_SOLTO_RE = re.compile(r"[A-Za-z]{1,5}\d{0,5}(?:-[A-Za-z0-9]{1,6})+")
+SKU_SEM_HIFEN_RE = re.compile(r"\b[A-Z]{2,5}\d{2,6}[A-Z]?\b")
 PRECO_RE = re.compile(r"^\d{1,4},\d{2}$")
 CJK_RE = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]")
 TOL_DUP = 1.5      # pt: tolerância p/ considerar caractere "sombra"
@@ -247,29 +248,56 @@ def fotos_geral(imgs):
 
 
 def cards_geral(palavras, imgs, dims):
-    """Âncora: a linha 'PCS/CX:' (uma por card). Coluna = terço da página."""
-    larg = dims[0]
+    """Grade fixa 3 colunas x 3 linhas (9 cards por página)."""
+    larg, alt = dims
     fotos = fotos_geral(imgs)
+    
+    y_inicio = alt * 0.165
+    y_fim_pag = alt * 0.965
+    alt_linha = (y_fim_pag - y_inicio) / 3
+    larg_col = larg / 3
+
     cards = []
-    for p in sorted((w for w in palavras if w["t"].startswith("PCS/CX")),
-                    key=lambda w: (w["y0"], w["x0"])):
-        col = min(2, int(((p["x0"] + p["x1"]) / 2) / (larg / 3)))
-        x0, x1 = col * larg / 3, (col + 1) * larg / 3
-        cand = [f for f in fotos if x0 <= (f[0] + f[2]) / 2 <= x1
-                and p["y0"] - 90 <= f[3] <= p["y0"] + 2]
-        # a maior área evita pegar fatias de fundo/sombra que o fitz também lista
-        foto = max(cand, key=lambda f: (f[2] - f[0]) * (f[3] - f[1])) if cand else None
-        # o SKU às vezes se sobrepõe ao canto inferior da foto (~14pt) ou fica
-        # abaixo dela: o topo da zona é o fundo da foto menos essa folga
-        topo = max(p["y0"] - 90, foto[3] - 14) if foto else p["y0"] - 70
-        cards.append((p, foto, (x0, topo, x1, p["y1"] + 3)))
+    for linha in range(3):
+        for col in range(3):
+            x0, x1 = col * larg_col, (col + 1) * larg_col
+            cy0 = y_inicio + linha * alt_linha
+            cy1 = y_inicio + (linha + 1) * alt_linha
+
+            cand = [
+                f for f in fotos
+                if x0 <= (f[0] + f[2]) / 2 <= x1
+                and cy0 <= (f[1] + f[3]) / 2 <= cy1
+            ]
+            foto = max(cand, key=lambda f: (f[2] - f[0]) * (f[3] - f[1])) if cand else None
+
+            ws_celula = [
+                w for w in palavras
+                if x0 <= (w["x0"] + w["x1"]) / 2 <= x1
+                and cy0 <= (w["y0"] + w["y1"]) / 2 <= cy1
+            ]
+            tem_tecnico = any("PCS/CX" in w["t"] or "Unid.CX" in w["t"] for w in ws_celula)
+            if not tem_tecnico:
+                continue
+
+            topo = max(cy0, foto[3] - 14) if foto else cy0
+            cards.append((linha * 3 + col + 1, foto, (x0, topo, x1, cy1)))
+            
+            tem_dados = any("PCS/CX" in w["t"] or "Unid.CX" in w["t"] for w in ws_celula)
+            if not foto and not tem_dados:
+                continue
+
+            topo = max(cy0, foto[3] - 14) if foto else cy0
+            cards.append((linha * 3 + col + 1, foto, (x0, topo, x1, cy1)))
     return cards
 
 
 def achar_skus(texto):
-    """SKUs dentro de um texto: precisam ter hífen e pelo menos um dígito
-    (descarta 'USB-C', 'type-c')."""
-    return [m for m in SKU_SOLTO_RE.finditer(texto) if any(c.isdigit() for c in m.group(0))]
+    """SKUs dentro de um texto: prioriza com hífen; fallback para código alfanumérico."""
+    com_hifen = [m for m in SKU_SOLTO_RE.finditer(texto) if any(c.isdigit() for c in m.group(0))]
+    if com_hifen:
+        return com_hifen
+    return list(SKU_SEM_HIFEN_RE.finditer(texto))
 
 
 def _num_pcs(bruto):
@@ -358,7 +386,7 @@ def campos_geral(zona, palavras):
 
 def processar_geral(n, palavras, imgs, dims, a, salvar_foto, vistos):
     regs = []
-    for pcs_w, foto, zona in cards_geral(palavras, imgs, dims):
+    for idx, foto, zona in cards_geral(palavras, imgs, dims):
         p, linhas = campos_geral(zona, palavras)
         if a.debug and a.debug == p["sku"]:
             print(f"\n=== DEBUG {p['sku']} (pág {n}) ===")
@@ -367,6 +395,7 @@ def processar_geral(n, palavras, imgs, dims, a, salvar_foto, vistos):
                 print("   ", repr(t))
             print("campos:", p, "\n======\n")
         p["pagina"] = n
+        p["ordem_pagina"] = idx
         if not foto:
             p["avisos"].append("foto não encontrada")
         elif p["sku"]:
