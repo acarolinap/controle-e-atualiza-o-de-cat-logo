@@ -1,30 +1,26 @@
 """Fase 3 - Geração do Catálogo PDF com Jinja2 e Playwright (em lotes de páginas).
 
 Uso: python fase3_gerador.py
-     python fase3_gerador.py --limite 18               (teste rápido)
+     python fase3_gerador.py --paginas 1-12            (teste rápido: só essas páginas de origem)
      python fase3_gerador.py --logo "caminho\\da\\logo.png"
 
 Regras:
-  * Só entram produtos com status_publicacao = 'ativo', na ordem do catálogo
-    (pagina_origem, sku).
-  * 9 produtos por página (grade 3 x 3), com cabeçalho e rodapé repetidos.
-  * SEÇÕES: a coluna opcional `secao` do banco ('promocao' ou 'novidades')
-    indica o tipo da página no catálogo em mandarim. O título vermelho
-    (PROMOÇÃO / NOVIDADES) só aparece em páginas dessa seção, e uma página
-    nunca mistura seções: quando a seção muda, começa uma página nova.
-    Itens sem seção ficam em páginas sem título.
-  * Preço verde (normal) ou vermelho (item com preco_promocional preenchido, que
-    é o "特价" do card no catálogo em mandarim); nesse caso o preço normal aparece
-    riscado ao lado. Isso vale em qualquer página, com ou sem título PROMOÇÃO.
-  * A imagem de cada SKU é procurada em IMAGENS_DIRS, na ordem: o catálogo
-    traduzido (saida/) tem prioridade sobre o geral (saida_geral/).
-  * Valores ausentes nunca são inventados: sem nome em português, sai só o
-    nome em chinês; sem status, a faixa fica só com a logo.
-  * Os lotes têm um número de páginas inteiro (PAGINAS_POR_LOTE), para que
-    nenhuma página fique dividida entre dois PDFs parciais.
-  * Logo: --logo > variável de ambiente LOGO_PATH > primeiro arquivo "logo*"
-    encontrado em LOGO_DIRS. A margem transparente da logo é recortada
-    automaticamente (precisa do Pillow); se não achar a logo, usa o texto.
+  * O PDF ESPELHA o catálogo em mandarim: cada página de origem vira uma página brasileira,
+    com os mesmos cards na mesma ordem. SKUs repetidos no original ficam repetidos.
+    (Dados: tabela catalogo_cards, gerada pela Fase 2c.)
+  * Só entram cards cujo SKU não esteja marcado como inativo em catalogo_produtos
+    (status_publicacao <> 'ativo' tira o SKU de todas as páginas).
+  * Título vermelho (PROMOÇÃO / NOVIDADES) só nas páginas que têm esse título no original
+    (tabela catalogo_paginas).
+  * Preço verde (normal) ou vermelho (card com preco_promocional, o "特价" do original);
+    nesse caso o preço normal aparece riscado ao lado, em qualquer página.
+  * Nome em português: o de catalogo_produtos (traduções) tem prioridade sobre o do card.
+  * Valores ausentes nunca são inventados: sem nome em português, sai só o nome em chinês;
+    sem status, a faixa fica só com a logo.
+  * Os lotes têm um número de páginas inteiro (PAGINAS_POR_LOTE).
+  * Logo: --logo > variável de ambiente LOGO_PATH > primeiro arquivo "logo*" encontrado em
+    LOGO_DIRS. A margem transparente da logo é recortada automaticamente (precisa do Pillow);
+    se não achar a logo, usa o texto.
 """
 import argparse
 import os
@@ -63,39 +59,33 @@ LOGO_DIRS = [                            # onde procurar a logo (relativo à pas
 ]
 LOGO_EXTS = (".png", ".svg", ".webp", ".jpg", ".jpeg")
 
-IMAGENS_DIRS = [                         # ordem = prioridade
-    os.path.join("saida", "assets", "img"),
-    os.path.join("saida_geral", "assets", "img"),
-]
 SAIDA_DIR = "saida_catalogo"             # HTML e PDFs gerados (coberto pelo .gitignore: saida*/)
 
 CARDS_POR_PAGINA = 9                     # 3 colunas x 3 linhas
-PAGINAS_POR_LOTE = 12                    # 12 x 9 = 108 produtos por PDF parcial
-
-COLUNAS_OPCIONAIS = ("preco_promocional", "secao")
+PAGINAS_POR_LOTE = 12                    # 12 páginas por PDF parcial
 
 SQL = """
-    SELECT l.pagina AS pagina_layout, l.ordem_pagina,
-           p.sku, p.preco_brl, {preco_promocional} AS preco_promocional, {secao} AS secao,
-           p.pcs_cx, p.nome_pt, p.nome_cn, p.status_montagem, p.pagina_origem
-    FROM catalogo_layout l
-    JOIN catalogo_produtos p ON p.sku = l.sku
-    WHERE p.status_publicacao = 'ativo'
-    ORDER BY l.pagina ASC, l.ordem_pagina ASC;
+    SELECT c.pagina, c.posicao, c.sku, c.preco_brl, c.preco_promocional, c.pcs_cx,
+           COALESCE(NULLIF(p.nome_pt, ''), c.nome_pt) AS nome_pt,
+           c.nome_cn, c.status_montagem, c.imagem, g.secao
+    FROM catalogo_cards c
+    LEFT JOIN catalogo_produtos p ON p.sku = c.sku
+    LEFT JOIN catalogo_paginas g ON g.pagina = c.pagina
+    WHERE COALESCE(p.status_publicacao, 'ativo') = 'ativo'
+      AND c.pagina BETWEEN %(inicio)s AND %(fim)s
+    ORDER BY c.pagina, c.posicao;
 """
 
 
 # -------------------------------------------------------------------- dados
-def buscar_produtos_banco():
+def buscar_cards_banco(inicio=1, fim=10**6):
     conn = psycopg2.connect(**DB_CONFIG)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # colunas opcionais: se não existirem, entram como NULL
-            cur.execute("""SELECT column_name FROM information_schema.columns
-                           WHERE table_name = 'catalogo_produtos'""")
-            existentes = {r["column_name"] for r in cur.fetchall()}
-            colunas = {c: (c if c in existentes else "NULL") for c in COLUNAS_OPCIONAIS}
-            cur.execute(SQL.format(**colunas))
+            cur.execute("SELECT to_regclass('catalogo_cards') AS t")
+            if cur.fetchone()["t"] is None:
+                raise SystemExit("A tabela catalogo_cards não existe. Rode antes o fase2c_paginas.py.")
+            cur.execute(SQL, {"inicio": inicio, "fim": fim})
             return cur.fetchall()
     finally:
         conn.close()
@@ -125,12 +115,11 @@ def status_para_rotulos(status):
     return None, None
 
 
-def localizar_imagem(sku):
-    for pasta in IMAGENS_DIRS:
-        caminho = Path(pasta) / f"{sku}.png"
-        if caminho.exists():
-            return caminho.resolve().as_uri()
-    return None
+def imagem_para_uri(caminho):
+    if not caminho:
+        return None
+    p = Path(caminho)
+    return p.resolve().as_uri() if p.exists() else None
 
 
 def localizar_logo(caminho=None):
@@ -183,13 +172,12 @@ def preparar_produtos(linhas):
     produtos = []
     for r in linhas:
         status_pt, status_cn = status_para_rotulos(r.get("status_montagem"))
-        secao = (r.get("secao") or "").strip().lower() or None
         promo = r.get("preco_promocional")
         com_preco_promo = promo is not None and float(promo) > 0
         produtos.append({
-            "pagina_layout": r["pagina_layout"],
-            "sku": r["sku"],
-            "secao": secao,
+            "pagina": r["pagina"],
+            "sku": r.get("sku"),
+            "secao": (r.get("secao") or "").strip().lower() or None,
             "nome_pt": limpar_texto(r.get("nome_pt")),
             "nome_cn": limpar_texto(r.get("nome_cn")),
             "pcs_cx": r.get("pcs_cx"),
@@ -198,46 +186,46 @@ def preparar_produtos(linhas):
             "preco_antigo_fmt": formatar_preco(r.get("preco_brl")) if com_preco_promo else None,
             "status_pt": status_pt,
             "status_cn": status_cn,
-            "imagem": localizar_imagem(r["sku"]),
-            
+            "imagem": imagem_para_uri(r.get("imagem")),
         })
     return produtos
 
 
 def relatar_lacunas(produtos):
+    def ref(p):
+        return f"pág {p['pagina']}: {p['sku'] or 'sem SKU'}"
     lacunas = {
-        "sem imagem": [p["sku"] for p in produtos if not p["imagem"]],
-        "sem nome em português": [p["sku"] for p in produtos if not p["nome_pt"]],
-        "sem preço": [p["sku"] for p in produtos if p["preco_fmt"] is None],
-        "sem status de montagem": [p["sku"] for p in produtos if not p["status_pt"]],
-        "em página PROMOÇÃO sem preço promocional (preço normal, em verde)": [
-            p["sku"] for p in produtos if p["secao"] == "promocao" and not p["preco_antigo_fmt"]],
-        "com seção desconhecida (sem título)": [
-            p["sku"] for p in produtos if p["secao"] and p["secao"] not in TITULOS],
+        "cards sem SKU (preencher à mão)": [ref(p) for p in produtos if not p["sku"]],
+        "cards sem imagem": [ref(p) for p in produtos if not p["imagem"]],
+        "cards sem nome em português": [ref(p) for p in produtos if not p["nome_pt"]],
+        "cards sem preço": [ref(p) for p in produtos if p["preco_fmt"] is None],
+        "cards sem status de montagem": [ref(p) for p in produtos if not p["status_pt"]],
+        "cards em página PROMOÇÃO sem preço promocional (preço normal, em verde)": [
+            ref(p) for p in produtos if p["secao"] == "promocao" and not p["preco_antigo_fmt"]],
+        "cards com seção desconhecida (sem título)": [
+            ref(p) for p in produtos if p["secao"] and p["secao"] not in TITULOS],
     }
-    for nome, skus in lacunas.items():
-        if skus:
-            amostra = ", ".join(skus[:6]) + (" ..." if len(skus) > 6 else "")
-            print(f"  aviso: {len(skus):4d} {nome} ({amostra})")
+    for nome, itens in lacunas.items():
+        if itens:
+            amostra = "; ".join(itens[:4]) + (" ..." if len(itens) > 4 else "")
+            print(f"  aviso: {len(itens):4d} {nome} ({amostra})")
 
 
 def em_paginas(produtos, por_pagina=CARDS_POR_PAGINA):
-    """Agrupa exatamente pelo número da página original do catálogo chinês."""
-    grupos = {}
-    for p in produtos:
-        pag = p["pagina_layout"]
-        grupos.setdefault(pag, []).append(p)
-
+    """Uma página brasileira por página de origem (espelho do original), na mesma ordem."""
     paginas = []
-    for pag in sorted(grupos):
-        itens = grupos[pag]
-        secao = next((x["secao"] for x in itens if x["secao"]), None)
-        paginas.append({
-            "produtos": itens,
-            "secao": secao,
-            "titulo": TITULOS.get(secao),
-        })
-    return paginas
+    atual = None
+    for p in produtos:
+        if atual is None or p["pagina"] != atual["pagina"]:
+            atual = {"pagina": p["pagina"], "produtos": [], "secao": p["secao"],
+                     "titulo": TITULOS.get(p["secao"])}
+            paginas.append(atual)
+        atual["produtos"].append(p)
+    saida = []                         # segurança: página com mais de 9 cards vira duas
+    for pg in paginas:
+        for i in range(0, len(pg["produtos"]), por_pagina):
+            saida.append({**pg, "produtos": pg["produtos"][i:i + por_pagina]})
+    return saida
 
 
 def resumo_secoes(paginas):
@@ -284,18 +272,26 @@ def html_para_pdf(browser, html_path, pdf_path):
         page.close()
 
 
-def gerar_pdf_catalogo(limite=None, logo=None):
+def intervalo_paginas(texto):
+    if not texto:
+        return 1, 10**6
+    if "-" in texto:
+        a, b = texto.split("-", 1)
+        return int(a), int(b)
+    return int(texto), int(texto)
+
+
+def gerar_pdf_catalogo(paginas_origem=None, logo=None):
     verificar_template()
-    print("Buscando produtos ativos no banco de dados...")
-    produtos = preparar_produtos(buscar_produtos_banco())
-    if limite:
-        produtos = produtos[:limite]
+    inicio, fim = intervalo_paginas(paginas_origem)
+    print("Buscando os cards no banco de dados...")
+    produtos = preparar_produtos(buscar_cards_banco(inicio, fim))
     paginas = em_paginas(produtos)
-    print(f"{len(produtos)} produtos -> {len(paginas)} páginas")
+    print(f"{len(produtos)} cards -> {len(paginas)} páginas")
     resumo_secoes(paginas)
     relatar_lacunas(produtos)
     if not produtos:
-        print("Nada a gerar: nenhum produto com status_publicacao = 'ativo'.")
+        print("Nada a gerar: nenhum card encontrado para esse intervalo.")
         return
 
     logo_uri, logo_path = localizar_logo(logo)
@@ -347,7 +343,7 @@ def gerar_pdf_catalogo(limite=None, logo=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Gera o catálogo PDF a partir do banco.")
-    ap.add_argument("--limite", type=int, help="gera só os N primeiros produtos (teste)")
+    ap.add_argument("--paginas", help="só estas páginas de origem, ex.: 1-12 (teste rápido)")
     ap.add_argument("--logo", help="caminho da logo (png/svg/webp/jpg)")
     a = ap.parse_args()
-    gerar_pdf_catalogo(a.limite, a.logo)
+    gerar_pdf_catalogo(a.paginas, a.logo)

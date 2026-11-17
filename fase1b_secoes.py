@@ -42,7 +42,7 @@ DB_CONFIG = {
 
 # faixa do título, como fração da altura da página (o catálogo tem 969 pt de altura)
 FAIXA_TITULO = (0.098, 0.165)
-TITULOS = (("novidades", "novidades"), ("promocao", "promocao"))   # (secao, trecho sem acento)
+TITULOS = (("novidades", "novidades"), ("promocao", "promocao"))   
 
 PROMO_RE = re.compile(r"(?:特价|promo[cç][aã]o)\s*[：:]\s*(\d+(?:[.,]\d+)?)", re.I)
 SKU_FIM_RE = re.compile(r"/\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)\s*$")

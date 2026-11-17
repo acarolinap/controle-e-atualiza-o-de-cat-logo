@@ -218,16 +218,11 @@ body {
 .nome {
     padding: 0 6px;
     text-align: center;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 500;
-    line-height: 1.15;
+    line-height: 1.18;
     text-transform: uppercase;
     color: var(--cinza-texto);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
 }
 .nome.longo { font-size: 10px; }
 .nome.cn { text-transform: none; }
@@ -422,19 +417,19 @@ body {
             <article class="card">
                 <div class="foto">
                     {% if p.imagem %}
-                    <img src="{{ p.imagem }}" alt="{{ p.sku }}">
+                    <img src="{{ p.imagem }}" alt="{{ p.sku or '' }}">
                     {% else %}
                     <span class="sem-foto">SEM IMAGEM</span>
                     {% endif %}
                 </div>
-                <div class="sku">{{ p.sku }}</div>
+                {% if p.sku %}<div class="sku">{{ p.sku }}</div>{% endif %}
                 {% if p.nome_pt %}<div class="nome{% if p.nome_pt|length > 30 %} longo{% endif %}">{{ p.nome_pt }}</div>{% endif %}
                 {% if p.nome_cn %}<div class="nome cn{% if p.nome_cn|length > 18 %} longo{% endif %}">{{ p.nome_cn }}</div>{% endif %}
                 {% if p.pcs_cx is not none %}<div class="pcs">{{ p.pcs_cx }} PCS/CX</div>{% endif %}
                 <div class="preco">
                     <span class="moeda">R$</span>
                     {% if p.preco_antigo_fmt %}<span class="antigo">{{ p.preco_antigo_fmt }}</span>{% endif %}
-                    <span class="novo{% if p.promocional %} promo{% endif %}">{{ p.preco_fmt if p.preco_fmt is not none else '00,00' }}</span>
+                    <span class="novo{% if p.promocional %} promo{% endif %}">{{ p.preco_fmt if p.preco_fmt else '--' }}</span>
                 </div>
                 <div class="faixa">
                     <div class="mini">{{ logo() }}</div>

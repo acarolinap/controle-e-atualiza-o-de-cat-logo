@@ -19,8 +19,7 @@ from pathlib import Path
 
 # --- comuns
 SKU_RE = re.compile(r"^[A-Z]{1,5}-\d{1,5}[A-Z]?$")             # palavra isolada
-SKU_SOLTO_RE = re.compile(r"[A-Za-z]{1,5}\d{0,5}(?:-[A-Za-z0-9]{1,6})+")
-SKU_SEM_HIFEN_RE = re.compile(r"\b[A-Z]{2,5}\d{2,6}[A-Z]?\b")
+SKU_SOLTO_RE = re.compile(r"[A-Za-z]{1,5}\d{0,5}(?:-[A-Za-z0-9]{1,6})+")   # dentro de uma linha
 PRECO_RE = re.compile(r"^\d{1,4},\d{2}$")
 CJK_RE = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]")
 TOL_DUP = 1.5      # pt: tolerância p/ considerar caractere "sombra"
@@ -38,6 +37,9 @@ STATUS_TOKEN_RE = re.compile(
 STATUS_MAP = {"desmontado": "desmontado", "montado": "montado",
               "散装": "desmontado", "包好": "montado"}
 PLACEHOLDER_NOME = "中文品名"
+PROMO_RE = re.compile(r"特价\s*[:：]?\s*([\d.,]+)")            # "特价：17.00" = preço especial
+# títulos vermelhos do catálogo em mandarim -> (nome na saída, trechos sem acento, maiúsculos)
+SECOES = (("NOVIDADES", ("NOVIDADE",)), ("PROMOÇÃO", ("PROMOCAO",)))
 FOTO_GERAL_W = (100, 260)   # largura da foto do card (~135 a ~215pt conforme a seção)
 FOTO_GERAL_H = (75, 200)    # altura da foto do card
 
@@ -247,57 +249,42 @@ def fotos_geral(imgs):
     return fotos
 
 
+def ordem_de_leitura(ancoras, tol_linha=25.0):
+    """Ordena os cards como no catálogo: linha por linha (de cima p/ baixo) e, dentro
+    de cada linha, da esquerda p/ a direita. Os cards de uma mesma linha diferem 1-3 pt
+    em Y, então ordenar por (y, x) embaralhava as colunas."""
+    linhas = []
+    for w in sorted(ancoras, key=lambda w: w["y0"]):
+        if linhas and abs(w["y0"] - linhas[-1][0]["y0"]) < tol_linha:
+            linhas[-1].append(w)
+        else:
+            linhas.append([w])
+    return [w for ln in linhas for w in sorted(ln, key=lambda w: w["x0"])]
+
+
 def cards_geral(palavras, imgs, dims):
-    """Grade fixa 3 colunas x 3 linhas (9 cards por página)."""
-    larg, alt = dims
+    """Âncora: a linha 'PCS/CX:' (uma por card). Coluna = terço da página."""
+    larg = dims[0]
     fotos = fotos_geral(imgs)
-    
-    y_inicio = alt * 0.165
-    y_fim_pag = alt * 0.965
-    alt_linha = (y_fim_pag - y_inicio) / 3
-    larg_col = larg / 3
-
     cards = []
-    for linha in range(3):
-        for col in range(3):
-            x0, x1 = col * larg_col, (col + 1) * larg_col
-            cy0 = y_inicio + linha * alt_linha
-            cy1 = y_inicio + (linha + 1) * alt_linha
-
-            cand = [
-                f for f in fotos
-                if x0 <= (f[0] + f[2]) / 2 <= x1
-                and cy0 <= (f[1] + f[3]) / 2 <= cy1
-            ]
-            foto = max(cand, key=lambda f: (f[2] - f[0]) * (f[3] - f[1])) if cand else None
-
-            ws_celula = [
-                w for w in palavras
-                if x0 <= (w["x0"] + w["x1"]) / 2 <= x1
-                and cy0 <= (w["y0"] + w["y1"]) / 2 <= cy1
-            ]
-            tem_tecnico = any("PCS/CX" in w["t"] or "Unid.CX" in w["t"] for w in ws_celula)
-            if not tem_tecnico:
-                continue
-
-            topo = max(cy0, foto[3] - 14) if foto else cy0
-            cards.append((linha * 3 + col + 1, foto, (x0, topo, x1, cy1)))
-            
-            tem_dados = any("PCS/CX" in w["t"] or "Unid.CX" in w["t"] for w in ws_celula)
-            if not foto and not tem_dados:
-                continue
-
-            topo = max(cy0, foto[3] - 14) if foto else cy0
-            cards.append((linha * 3 + col + 1, foto, (x0, topo, x1, cy1)))
+    for p in ordem_de_leitura([w for w in palavras if w["t"].startswith("PCS/CX")]):
+        col = min(2, int(((p["x0"] + p["x1"]) / 2) / (larg / 3)))
+        x0, x1 = col * larg / 3, (col + 1) * larg / 3
+        cand = [f for f in fotos if x0 <= (f[0] + f[2]) / 2 <= x1
+                and p["y0"] - 90 <= f[3] <= p["y0"] + 2]
+        # a maior área evita pegar fatias de fundo/sombra que o fitz também lista
+        foto = max(cand, key=lambda f: (f[2] - f[0]) * (f[3] - f[1])) if cand else None
+        # o SKU às vezes se sobrepõe ao canto inferior da foto (~14pt) ou fica
+        # abaixo dela: o topo da zona é o fundo da foto menos essa folga
+        topo = max(p["y0"] - 90, foto[3] - 14) if foto else p["y0"] - 70
+        cards.append((p, foto, (x0, topo, x1, p["y1"] + 3)))
     return cards
 
 
 def achar_skus(texto):
-    """SKUs dentro de um texto: prioriza com hífen; fallback para código alfanumérico."""
-    com_hifen = [m for m in SKU_SOLTO_RE.finditer(texto) if any(c.isdigit() for c in m.group(0))]
-    if com_hifen:
-        return com_hifen
-    return list(SKU_SEM_HIFEN_RE.finditer(texto))
+    """SKUs dentro de um texto: precisam ter hífen e pelo menos um dígito
+    (descarta 'USB-C', 'type-c')."""
+    return [m for m in SKU_SOLTO_RE.finditer(texto) if any(c.isdigit() for c in m.group(0))]
 
 
 def _num_pcs(bruto):
@@ -317,12 +304,24 @@ def _num_preco(bruto):
     return val, not re.fullmatch(r"\d+(\.\d{1,2})?", bruto)  # (valor, formato estranho?)
 
 
+def detectar_secao(palavras, y_max=150):
+    """Título vermelho da página no catálogo geral (NOVIDADES / PROMOÇÃO) ou None."""
+    topo = " ".join(w["t"] for w in palavras if w["y1"] < y_max)
+    topo = unicodedata.normalize("NFD", topo)
+    topo = "".join(c for c in topo if unicodedata.category(c) != "Mn").upper()
+    for nome, chaves in SECOES:
+        if any(k in topo for k in chaves):
+            return nome
+    return None
+
+
 def campos_geral(zona, palavras):
     ws = [w for w in palavras
           if zona[0] <= (w["x0"] + w["x1"]) / 2 <= zona[2]
           and zona[1] <= (w["y0"] + w["y1"]) / 2 <= zona[3]]
     linhas = linhas_da_zona(ws)
     tecnico, status_vistos, skus_vistos = "", [], []
+    promo, avisos_promo = None, []
     pt_parts, cn_parts = [], []
     for txt in linhas:
         if "PCS/CX" in txt or "Unid.CX" in txt:
@@ -330,6 +329,12 @@ def campos_geral(zona, palavras):
             continue
         if PLACEHOLDER_NOME in txt:
             continue
+        m_promo = PROMO_RE.search(txt)
+        if m_promo:                                   # preço especial: não faz parte do nome
+            promo, _ = _num_preco(m_promo.group(1))
+            txt = PROMO_RE.sub(" ", txt)
+        elif "特价" in txt:
+            avisos_promo.append("preço especial ilegível")
         # marcadores de status (Desmontado/montado/散装/包好), em qualquer posição
         for m in STATUS_TOKEN_RE.finditer(txt):
             status_vistos.append(STATUS_MAP[m.group(1).lower()])
@@ -344,7 +349,7 @@ def campos_geral(zona, palavras):
         if txt:
             (cn_parts if CJK_RE.search(txt) else pt_parts).append(txt)
 
-    avisos = []
+    avisos = list(avisos_promo)
     sku = skus_vistos[-1] if skus_vistos else None
     if sku and sku != sku.upper():
         avisos.append("SKU em minúsculas (normalizado)")
@@ -377,17 +382,21 @@ def campos_geral(zona, palavras):
             avisos.append(f"Unid.CX com formato estranho ({unid_m.group(1)})")
         if preco == 0:
             avisos.append("Unid.CX zerado")
+    if promo is not None and preco is not None and promo >= preco:
+        avisos.append("preço especial não é menor que o normal")
     return {
         "sku": sku, "nome_cn": nome_cn, "nome_pt": nome_pt,
-        "preco_cn": preco, "pcs_cx": pcs,
+        "preco_cn": preco, "preco_promocional": promo, "pcs_cx": pcs,
         "status_montagem": status, "avisos": avisos,
     }, linhas
 
 
 def processar_geral(n, palavras, imgs, dims, a, salvar_foto, vistos):
     regs = []
-    for idx, foto, zona in cards_geral(palavras, imgs, dims):
+    secao = detectar_secao(palavras)
+    for pcs_w, foto, zona in cards_geral(palavras, imgs, dims):
         p, linhas = campos_geral(zona, palavras)
+        p["secao"] = secao
         if a.debug and a.debug == p["sku"]:
             print(f"\n=== DEBUG {p['sku']} (pág {n}) ===")
             print("foto:", r1(foto) if foto else None, "| zona:", r1(zona))
@@ -395,7 +404,6 @@ def processar_geral(n, palavras, imgs, dims, a, salvar_foto, vistos):
                 print("   ", repr(t))
             print("campos:", p, "\n======\n")
         p["pagina"] = n
-        p["ordem_pagina"] = idx
         if not foto:
             p["avisos"].append("foto não encontrada")
         elif p["sku"]:
@@ -454,6 +462,8 @@ def main():
         print(f"cards com aviso: {len(com_aviso)} de {len(produtos)}")
         for tipo, q in tipos.most_common():
             print(f"  {q:4d}  {tipo}")
+        por_secao = Counter(p.get("secao") or "(sem título)" for p in produtos)
+        print("seções:", ", ".join(f"{k}: {v}" for k, v in por_secao.items()))
         print("(detalhes no campo 'avisos' de cada item do produtos.json)")
 
 
